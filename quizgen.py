@@ -1,86 +1,137 @@
+import yaml
 import moviepy.editor as mpy
 import gizeh as gz
 from math import pi
+import textwrap
+
+# prod
+# import warnings
+
+# warnings.filterwarnings("ignore")
 
 VIDEO_SIZE = (640, 480)
 BLUE = (59 / 255, 89 / 255, 152 / 255)
 GREEN = (176 / 255, 210 / 255, 63 / 255)
 WHITE = (255, 255, 255)
 WHITE_GIZEH = (1, 1, 1)
-SB_LOGO_PATH = "./assets/titlebox.png"
 DURATION = 10
-
-CT_DURATION = 10
 
 
 def countdown(t):
-    surface = gz.Surface(640, 60, bg_color=WHITE_GIZEH)
+    surface = gz.Surface(100, 60, bg_color=WHITE_GIZEH)
     text = gz.text(
-        f"0:0{CT_DURATION - int(t)}",
+        f"0:{int(QUESTION_DURATION) - int(t):02}",
         fontfamily="Charter",
         fontsize=30,
         fontweight="bold",
         fill=BLUE,
-        xy=(320, 40),
+        xy=(50, 30),
     )
     text.draw(surface)
     return surface.get_npimage()
 
 
-def render_text(t):
-    surface = gz.Surface(640, 60, bg_color=WHITE_GIZEH)
-    question_box = gz.rectangle(
-        lx=100 * t / float(DURATION),
-        ly=20,
-        xy=[50 + 100 * t / (2 * float(DURATION)), 35],
-        fill=(1, 0, 0))
-    question_box.draw(surface)
-    text = gz.text(
-        "Let's build together",
-        fontfamily="Charter",
-        fontsize=30,
-        fontweight="bold",
-        fill=BLUE,
-        xy=(320, 40),
-    )
-    text.draw(surface)
-    return surface.get_npimage()
+def title_text(t, title):
+    surface = gz.Surface(320, 100, bg_color=None)
 
+    titles = textwrap.wrap(title, 28)
 
-def draw_stars(t):
-    surface = gz.Surface(640, 120, bg_color=WHITE_GIZEH)
-    for i in range(5):
-        star = gz.star(
-            nbranches=5,
-            radius=120 * 0.2,
-            ratio=0.5,
-            xy=[100 * (i + 1), 50],
-            fill=GREEN,
-            angle=t * pi,
+    for i, subtitle in enumerate(titles):
+        text = gz.text(
+            subtitle,
+            fontfamily="Charter",
+            fontsize=22,
+            fontweight="bold",
+            fill=BLUE,
+            xy=(320 / 2, 15 + 50 / 2 + 25 * i),
         )
-        star.draw(surface)
-    return surface.get_npimage()
+        text.draw(surface)
+    return surface.get_npimage(transparent=True)
+
+
+def transparent_textclip(text_gz_function, title, duration):
+    graphics_clip_mask = mpy.VideoClip(
+        lambda t: text_gz_function(t, title)[:, :, 3] / 255.0, duration=duration, ismask=True)
+    graphics_clip = mpy.VideoClip(
+        lambda t: text_gz_function(t, title)[:, :, :3],
+        duration=duration).set_mask(graphics_clip_mask)
+    # debugging sizes (displays background box)
+    # graphics_clip = mpy.VideoClip(
+    #     lambda t: text_gz_function(t)[:, :, :3], duration=QUESTION_DURATION)
+    return graphics_clip
+
+
+def add_question(timeline, cliplib, title, resposta, image_url):
+
+    questiontl = []
+
+    background_image = mpy.ImageClip(image_url).set_position(("center", 0)).resize(VIDEO_SIZE)
+
+    text = transparent_textclip(title_text, title, QUESTION_DURATION)
+
+    question_video = mpy.CompositeVideoClip(
+        [
+            background_image, cliplib['question_back'], cliplib['ct'].set_position(
+                (VIDEO_SIZE[0] - cliplib['ct'].size[0], 0)),
+            text.set_position((40, VIDEO_SIZE[1] - text.size[1] - 50))
+        ],
+        size=VIDEO_SIZE,
+    ).set_duration(QUESTION_DURATION)
+
+    timeline.append(question_video)
+    questiontl.append(question_video)
+
+    text = transparent_textclip(title_text, resposta, QUESTION_DURATION)
+
+    response_video = mpy.CompositeVideoClip(
+        [
+            background_image, cliplib['question_back'],
+            text.set_position((40, VIDEO_SIZE[1] - text.size[1] - 50))
+        ],
+        size=VIDEO_SIZE,
+    ).set_duration(QUESTION_DURATION)
+
+    timeline.append(response_video)
+    questiontl.append(response_video)
+
+    return questiontl
 
 
 if __name__ == "__main__":
-    sb_logo = mpy.ImageClip(SB_LOGO_PATH).set_position(("center", 0)).resize(width=200)
+
+    with open('assets/preguntes.yaml') as file:
+        question_list = yaml.load(file, Loader=yaml.SafeLoader)
+
+    timeline = []
+
+    cliplib = {}
 
     entradeta = mpy.VideoFileClip("assets/entradeta.mp4").resize(VIDEO_SIZE)
+    timeline.append(entradeta)
+    entradeta.close()
 
-    ct = mpy.VideoClip(countdown, duration=10)
+    question_backclip = mpy.VideoFileClip("assets/pregunta_background.mp4").resize(VIDEO_SIZE)
+    cliplib['question_back'] = mpy.vfx.mask_color(
+        question_backclip, color=[0, 0, 0]).loop(duration=10)
 
-    text = mpy.VideoClip(render_text, duration=DURATION)
-    stars = mpy.VideoClip(draw_stars, duration=DURATION)
+    global QUESTION_DURATION
+    QUESTION_DURATION = cliplib['question_back'].duration
 
-    video = (
-        mpy.CompositeVideoClip(
-            [
-                sb_logo,
-                text.set_position(("center", sb_logo.size[1])),
-                stars.set_position(("center", sb_logo.size[1] + text.size[1])),
-            ],
-            size=VIDEO_SIZE,
-        ).on_color(color=WHITE, col_opacity=1).set_duration(DURATION))
+    cliplib['ct'] = mpy.VideoClip(countdown, duration=QUESTION_DURATION)
 
-    concat_clip = mpy.concatenate_videoclips([entradeta, ct, video])
-    concat_clip.write_videofile("quiz.mp4", fps=10)
+    for question in question_list:
+
+        qtl = add_question(timeline, cliplib, question['title'], question['resposta'],
+                           question['image_url'])
+
+        # debug
+        # qvideo = mpy.concatenate_videoclips(qtl)
+        # qvideo.write_videofile(f"pregunta-{question['title]}.mp4", fps=10)
+
+    qvideo = mpy.concatenate_videoclips(timeline)
+
+    audioclip = mpy.AudioFileClip("assets/catquiz_audio.mp3")
+    new_audioclip = mpy.CompositeAudioClip([audioclip]).set_duration(qvideo.duration)
+    qvideo.audio = new_audioclip
+
+    qvideo.write_videofile("catquiz.mp4", fps=10)
