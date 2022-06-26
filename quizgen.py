@@ -111,7 +111,7 @@ def add_question(timeline, cliplib, title, resposta, image_url):
 
     questiontl = []
 
-    background_image = ImageClip(image_url).set_position(("center", 0)).resize(VIDEO_SIZE)
+    background_image = resize(ImageClip(image_url).set_position(("center", 0)), VIDEO_SIZE)
 
     text = transparent_textclip(title_text, title, QUESTION_DURATION)
 
@@ -152,12 +152,12 @@ if __name__ == "__main__":
 
     cliplib = {}
 
-    entradeta = VideoFileClip("assets/entradeta.mp4").resize(VIDEO_SIZE)
+    entradeta = resize(VideoFileClip("assets/entradeta.mp4"), VIDEO_SIZE)
     timeline.append(entradeta)
     entradeta.close()
 
-    question_backclip = VideoFileClip("assets/pregunta_background.mp4").resize(VIDEO_SIZE)
-    cliplib['question_back'] = mask_color(question_backclip, color=[0, 0, 0]).loop(duration=10)
+    question_backclip = resize(VideoFileClip("assets/pregunta_background.mp4"), VIDEO_SIZE)
+    cliplib['question_back'] = loop(mask_color(question_backclip, color=[0, 0, 0]), duration=10)
 
     global QUESTION_DURATION
     QUESTION_DURATION = cliplib['question_back'].duration
