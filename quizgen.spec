@@ -8,7 +8,7 @@ a = Analysis(
     ['quizgen.py'],
     pathex=[],
     binaries=[],
-    datas=['c:\\Python37\\lib\\site-packages\\cairocffi\\VERSION'],
+    datas=[('c:\\Python37\\lib\\site-packages\\cairocffi\\VERSION', 'cairocffi')],
     hiddenimports=[],
     hookspath=[],
     runtime_hooks=[],
